@@ -1,0 +1,35 @@
+================================================================================
+ corpus/ — third-party music, included as test vectors
+================================================================================
+
+The `.v2m` files in this directory are NOT public domain and are NOT covered by
+the repository's CC0 dedication (see ../LICENSE).
+
+WHAT THEY ARE
+    Each file is a genuine V2M song carved unmodified from the executable of an
+    original, freely-distributed Farbrausch / .theprodukkt demo release (e.g.
+    .the .product, flybye, mark&sweep, candytron, .kkrieger, …). Per-song source
+    release and SHA-256 provenance are documented in embedded/PROVENANCE.md.
+
+WHY THEY ARE HERE
+    They serve a single technical purpose: ground-truth test vectors for this
+    player's determinism gate (test/check.py) and the fidelity/oracle work
+    documented in docs/ACCURACY.md. The player is validated by rendering these
+    genuine songs and comparing against reference renders from the original
+    engines. They are not provided for redistribution as music.
+
+RIGHTS
+    These compositions remain the property of their original authors. No
+    copyright or other rights are claimed over them by this repository, and they
+    are NOT relicensed. They are reproduced here under no license grant beyond
+    the fact that the source demos were released for free public distribution.
+
+REMOVAL
+    If you are a rights holder (artist or group) and would prefer a song not be
+    redistributed here, please open an issue or contact the maintainer. It will
+    be removed promptly, no questions asked.
+
+REPRODUCING THE CORPUS YOURSELF
+    The corpus is fully reproducible from the original demo releases. See
+    embedded/PROVENANCE.md for each source archive, its SHA-256, and the carve
+    procedure, so the test vectors can be regenerated rather than redistributed.
