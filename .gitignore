@@ -1,0 +1,14 @@
+# build artifacts
+build/
+*.o
+*.a
+v2dump
+test/mathcheck
+test/tablecheck
+test/twoinstance
+test/loadcheck
+test/forcecheck
+# render scratch
+/tmp/
+*.f32
+*.wav

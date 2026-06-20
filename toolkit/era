@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""era -- unified CLI for the era-extraction toolkit.
+
+  era detect  <exe>                      -> aplib | kkrunchy | ruletool | none
+  era unpack  <exe> <out.bin>            -> depack to a flat image
+  era carve   <image.bin>                -> list embedded v2m spans
+  era carve   <image.bin> --extract I --out song.v2m
+  era assay   <image.bin>                -> era-delta const/opcode report
+  era disasm  <image.bin> <va> [n]       -> disassemble n insns at a VA
+  era tap     <image.bin> <va> [type] [n]-> read typed data at a VA (static image peek)
+  era compare <a.f32> <b.f32> [eps]      -> oracle contract: max|d|, rms, divergence
+"""
+
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import packers
+import carve
+import eras
+import disasm as disasm_mod
+import bufcmp
+import tap as tap_mod
+
+
+def cmd_detect(args):
+    print(packers.detect_packer(args[0]))
+
+
+def cmd_unpack(args):
+    if len(args) < 2:
+        sys.exit("usage: era unpack <exe> <out.bin>")
+    image = packers.unpack(args[0], args[1])
+    stop = getattr(packers._emulate_stub, "last_stop", None)
+    if stop:
+        print("stub stop: %s eip=%#x" % (stop[0], stop[1]), file=sys.stderr)
+    print("unpacked %d bytes -> %s" % (len(image), args[1]))
+
+
+def cmd_carve(args):
+    extract_i = None
+    out = None
+    pos = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--extract":
+            extract_i = int(args[i + 1]); i += 2
+        elif args[i] == "--out":
+            out = args[i + 1]; i += 2
+        else:
+            pos.append(args[i]); i += 1
+    data = open(pos[0], "rb").read()
+    spans = carve.find_v2ms(data)
+    if extract_i is not None:
+        if not out:
+            sys.exit("--extract requires --out")
+        open(out, "wb").write(carve.extract(data, spans[extract_i]))
+        print("extracted span %d (%d bytes) -> %s" % (extract_i, spans[extract_i]["size"], out))
+        return
+    print("valid non-overlapping songs:", len(spans))
+    for i, h in enumerate(spans):
+        print("  [%d] off=%#x end=%#x size=%d timediv=%d maxtime=%d active=%d psize=%d spsize=%d" % (
+            i, h["start"], h["end"], h["size"], h["timediv"], h["maxtime"],
+            h["active"], h["psize"], h["spsize"]))
+
+
+def cmd_assay(args):
+    data = open(args[0], "rb").read()
+    print(eras.format_report(data))
+
+
+def cmd_disasm(args):
+    if len(args) < 2:
+        sys.exit("usage: era disasm <image.bin> <va> [n]")
+    data = open(args[0], "rb").read()
+    va = int(args[1], 16)
+    n = int(args[2]) if len(args) > 2 else 60
+    print(disasm_mod.format_lines(disasm_mod.disasm(data, va, n)))
+
+
+def cmd_tap(args):
+    if len(args) < 2:
+        sys.exit("usage: era tap <image.bin> <va> [type=u32|i32|f32|f64|u16|u8|hex] [count]")
+    data = open(args[0], "rb").read()
+    va = int(args[1], 16)
+    typ = args[2] if len(args) > 2 else "u32"
+    count = int(args[3]) if len(args) > 3 else 1
+    print("%#x: %s" % (va, tap_mod.format_read(data, va, typ, count)))
+
+
+def cmd_compare(args):
+    if len(args) < 2:
+        sys.exit("usage: era compare <a.f32> <b.f32> [eps]")
+    eps = float(args[2]) if len(args) > 2 else 0.0
+    res = bufcmp.compare(args[0], args[1], eps)
+    print(bufcmp.format_report(res))
+    sys.exit(0 if res["match"] else 1)
+
+
+CMDS = {"detect": cmd_detect, "unpack": cmd_unpack, "carve": cmd_carve,
+        "assay": cmd_assay, "disasm": cmd_disasm, "tap": cmd_tap, "compare": cmd_compare}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in CMDS:
+        sys.exit("usage: era {%s} <args...>" % "|".join(CMDS))
+    try:
+        CMDS[sys.argv[1]](sys.argv[2:])
+    except NotImplementedError as e:
+        sys.exit("era: %s" % e)
+
+
+if __name__ == "__main__":
+    main()
