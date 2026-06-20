@@ -19,7 +19,9 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # ---- feature configuration (era range + optional Ronan speech synth) -------
-option(V2_RONAN "Enable the Ronan speech-synth channel" ON)
+# OFF by default so the determinism baselines (Ronan-silent) hold; turn ON with
+# -DV2_RONAN=ON for songs that use the speech channel (candytron, josie, ...).
+option(V2_RONAN "Enable the Ronan speech-synth channel" OFF)
 set(V2_VER_MIN "" CACHE STRING "Lower bound of the compiled era range (blank = full)")
 set(V2_VER_MAX "" CACHE STRING "Upper bound of the compiled era range (blank = full)")
 
@@ -45,9 +47,7 @@ else()
 endif()
 
 add_library(v2_defs INTERFACE)
-if(NOT V2_RONAN)
-  target_compile_definitions(v2_defs INTERFACE V2_RONAN=0)
-endif()
+target_compile_definitions(v2_defs INTERFACE V2_RONAN=$<BOOL:${V2_RONAN}>)
 if(NOT V2_VER_MIN STREQUAL "")
   target_compile_definitions(v2_defs INTERFACE V2_VER_MIN=${V2_VER_MIN})
 endif()
