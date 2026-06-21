@@ -1,8 +1,11 @@
 # build artifacts
 build/
+build-win/
 *.o
 *.a
 v2dump
+v2play
+v2play.exe
 test/mathcheck
 test/tablecheck
 test/twoinstance

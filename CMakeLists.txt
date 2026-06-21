@@ -24,6 +24,8 @@ endif()
 option(V2_RONAN "Enable the Ronan speech-synth channel" OFF)
 set(V2_VER_MIN "" CACHE STRING "Lower bound of the compiled era range (blank = full)")
 set(V2_VER_MAX "" CACHE STRING "Upper bound of the compiled era range (blank = full)")
+set(V2_EMBED_SONG "" CACHE FILEPATH
+  "Path to a .v2m to bake into v2play (blank = none; v2play then needs a file arg)")
 
 # ---- the determinism / warning policy, per compiler ------------------------
 # Applied to every target so test binaries match the library bit-for-bit.
@@ -64,6 +66,97 @@ target_include_directories(v2redux PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # ---- the offline render CLI ------------------------------------------------
 add_executable(v2dump src/v2dump.cpp)
 target_link_libraries(v2dump PRIVATE v2redux v2_flags)
+
+# ---- the native real-time player + visualizer (sokol) ----------------------
+# Audio via sokol_audio (ALSA/CoreAudio/WASAPI), graphics via sokol_gfx+gl:
+# oscilloscope, log-frequency spectrum analyzer, and L/R VU bars. Links the
+# already-deterministic v2redux lib; this target itself is display-only and
+# deliberately does NOT inherit v2_flags (no -Wall over the vendored sokol
+# headers, and its float math never touches the render path).
+option(V2_BUILD_PLAYER "Build the native sokol player/visualizer (v2play)" ON)
+if(V2_BUILD_PLAYER)
+  set(SOKOL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sokol)
+  set(V2PLAY_SRC src/v2play.cpp ${SOKOL_DIR}/sokol_impl.cc)
+  set(V2PLAY_OK ON)
+  set(V2PLAY_LIBS "")
+  set(V2PLAY_DEFS "")
+
+  if(APPLE)
+    # sokol_app/audio need Cocoa; compile the impl as Objective-C++.
+    set_source_files_properties(${SOKOL_DIR}/sokol_impl.cc PROPERTIES
+      COMPILE_OPTIONS "-x;objective-c++")
+    list(APPEND V2PLAY_LIBS "-framework Cocoa" "-framework QuartzCore"
+      "-framework Metal" "-framework MetalKit" "-framework AudioToolbox")
+  elseif(WIN32)
+    # Windows backend: D3D11 by default; V2_WIN_GL switches to OpenGL (WGL),
+    # which is what runs under Wine (D3D11 there needs a Vulkan/DXVK stack).
+    option(V2_WIN_GL "Use the OpenGL backend on Windows instead of D3D11" OFF)
+    if(NOT MSVC)
+      # MinGW ignores sokol's #pragma comment(lib,...) -> link deps explicitly.
+      if(V2_WIN_GL)
+        list(APPEND V2PLAY_LIBS opengl32 ole32 gdi32 user32 shell32 kernel32)
+      else()
+        list(APPEND V2PLAY_LIBS d3d11 dxgi dxguid ole32 gdi32 user32 shell32 kernel32)
+      endif()
+    endif()
+    if(V2_WIN_GL)
+      list(APPEND V2PLAY_DEFS SOKOL_GLCORE)
+    endif()
+  else()
+    # Linux / *nix: GLX + X11 + ALSA
+    find_package(OpenGL)
+    find_package(X11)
+    find_package(ALSA)
+    find_package(Threads)
+    if(OPENGL_FOUND AND X11_FOUND AND ALSA_FOUND)
+      list(APPEND V2PLAY_LIBS OpenGL::GL ${X11_LIBRARIES} ${X11_Xi_LIB}
+        ${X11_Xcursor_LIB} ALSA::ALSA Threads::Threads ${CMAKE_DL_LIBS})
+    else()
+      set(V2PLAY_OK OFF)
+      message(WARNING "v2play disabled: needs OpenGL + X11(+Xi,Xcursor) + ALSA "
+        "(e.g. libgl-dev libx11-dev libxi-dev libxcursor-dev libasound2-dev)")
+    endif()
+  endif()
+
+  # optional: bake a .v2m into the exe so it plays with no file argument.
+  # Pure-CMake hex generation -> a byte-array TU; no external tools.
+  if(V2PLAY_OK AND NOT V2_EMBED_SONG STREQUAL "")
+    get_filename_component(_song_abs "${V2_EMBED_SONG}" ABSOLUTE
+      BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+    if(NOT EXISTS "${_song_abs}")
+      message(FATAL_ERROR "V2_EMBED_SONG not found: ${_song_abs}")
+    endif()
+    get_filename_component(_song_name "${_song_abs}" NAME)
+    # .cpp (not .c): the project enables only CXX, so a .c source would be
+    # silently dropped. extern "C" gives the const arrays external linkage.
+    set(_gen ${CMAKE_CURRENT_BINARY_DIR}/embedded_song.cpp)
+    file(READ "${_song_abs}" _hex HEX)
+    string(REGEX REPLACE "(..)" "0x\\1," _bytes "${_hex}")
+    file(WRITE ${_gen}
+      "// generated from ${_song_name} -- do not edit\n"
+      "extern \"C\" const unsigned char v2play_song[] = {${_bytes}};\n"
+      "extern \"C\" const unsigned long v2play_song_len = sizeof(v2play_song);\n")
+    list(APPEND V2PLAY_SRC ${_gen})
+    message(STATUS "v2play: embedding song '${_song_name}'")
+  endif()
+
+  if(V2PLAY_OK)
+    add_executable(v2play ${V2PLAY_SRC})
+    target_link_libraries(v2play PRIVATE v2redux ${V2PLAY_LIBS})
+    target_include_directories(v2play PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    if(V2PLAY_DEFS)
+      target_compile_definitions(v2play PRIVATE ${V2PLAY_DEFS})
+    endif()
+    if(WIN32 AND NOT MSVC)
+      # self-contained .exe: no libgcc/libstdc++/winpthread DLLs at runtime
+      target_link_options(v2play PRIVATE -static -static-libgcc -static-libstdc++)
+    endif()
+    if(NOT V2_EMBED_SONG STREQUAL "")
+      target_compile_definitions(v2play PRIVATE
+        V2PLAY_EMBEDDED V2PLAY_EMBED_NAME="${_song_name}")
+    endif()
+  endif()
+endif()
 
 # ---- tests (ctest) ---------------------------------------------------------
 # Off by default so a consumer embedding the lib pays nothing for them.
