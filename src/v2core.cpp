@@ -4375,8 +4375,12 @@ private:
       }
 #endif
 
-      // channel 15 -> Ronan
-      if (chan == CHANS-1)
+      // channel 15 -> Ronan (speech vocal tract). The render-time routing did
+      // not exist in the early core: at v0 (fr08) ch15 is an ordinary music
+      // channel and the 2000 render makes no ronan calls -- routing it through
+      // the idle vocal tract silenced fr08's ch15 layer (proven: Ronan-off is
+      // bit-exact to the C1 oracle). Gate so only v5+ articulates speech here.
+      if (chan == CHANS-1 && !instance.old(DELTA_NO_RONAN_CHANNEL))
         ronanCBProcess(&ronan, &instance.chanbuf[0].l, nsamples);
 
 #ifndef NDEBUG

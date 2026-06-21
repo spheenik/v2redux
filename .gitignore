@@ -1,6 +1,5 @@
 # build artifacts
-build/
-build-win/
+build*/
 *.o
 *.a
 v2dump

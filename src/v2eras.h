@@ -169,6 +169,18 @@ enum V2Delta {
                            // comp.outgain pushed makeup 98->128 (3.7x extra) plus
                            // lfo1 -> chorus.amount, both wrongly applied.
 
+  DELTA_NO_RONAN_CHANNEL,  // the render-time channel-15 -> Ronan (speech
+                           // vocal-tract) routing. OLD (early eras): ch15 is an
+                           // ordinary music channel, never passed through Ronan.
+                           // The year-2000 fr08 core (v0) inits Ronan but its
+                           // render makes NO ronan calls (C1 harness), and a
+                           // Ronan-OFF build is bit-exact to the C1 oracle --
+                           // fr08's ch15 carries music (an F3 layer entering at
+                           // 1:58) that the unconditional routing silenced by
+                           // running it through the idle vocal tract. NEW (v5+):
+                           // ch15 -> ronanCBProcess, so candytron/kkrieger
+                           // speech articulates.
+
   DELTA_COUNT
 };
 
@@ -371,6 +383,17 @@ inline constexpr V2DeltaRow kDeltas[DELTA_COUNT] = {
                                                      // build-date proxy (early-v5
                                                      // old-core unrepresentable),
                                                      // like the osc/player rows.
+  /* DELTA_NO_RONAN_CHANNEL   */ { 5, EV_ASSUMED }, // v0 PROVEN: NO ch15->Ronan
+                                                     // routing (fr08 C1 oracle
+                                                     // bit-exact with Ronan off;
+                                                     // the 2000 render makes no
+                                                     // ronan calls). v5 PROVEN:
+                                                     // routing present (candytron
+                                                     // speech needs it). The flip
+                                                     // in the v1..v4 gap is
+                                                     // unobserved (no v1-v4 song
+                                                     // uses ch15 speech) -> proxy
+                                                     // at 5, ASSUMED.
 };
 
 // Does the OLD (pre-flip) behavior apply at this behavior version?
