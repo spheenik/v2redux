@@ -131,4 +131,31 @@ void Player::setSeed(uint64_t seed)
   impl_->seq.SetSeed(seed); // applied at the next play() (Reset re-inits)
 }
 
+void Player::setChannelMask(uint32_t mask)
+{
+  if (impl_->opened)
+    impl_->seq.SetChanMask((sU32)mask);
+}
+
+int Player::getChannelPoly(int *dest16) const
+{
+  if (!impl_->opened) {
+    for (int i = 0; i < 16; i++) dest16[i] = 0;
+    return 0;
+  }
+  sInt tmp[17];
+  const_cast<V2MPlayer &>(impl_->seq).GetPoly(tmp);
+  for (int i = 0; i < 16; i++) dest16[i] = (int)tmp[i];
+  return (int)tmp[16];
+}
+
+void Player::getChannelNoteOns(uint32_t *dest16) const
+{
+  if (!impl_->opened) {
+    for (int i = 0; i < 16; i++) dest16[i] = 0;
+    return;
+  }
+  const_cast<V2MPlayer &>(impl_->seq).GetNoteOns((sU32 *)dest16);
+}
+
 } // namespace v2redux

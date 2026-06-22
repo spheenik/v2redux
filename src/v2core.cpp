@@ -678,6 +678,14 @@ struct V2Instance
   V2Rand rng;
   sU64 userSeed;
 
+  // interactive channel mute (display/playback knob, NOT part of the determinism
+  // contract). bit ch set = muted: the channel still renders its voices + FX
+  // (all state advances identically to the reference) but contributes nothing to
+  // any output bus -- so muting/unmuting is instant, in-phase, and click-free,
+  // and never perturbs the rendered bits of the other channels' dry signal.
+  // Default 0 (synthInit zeroes the whole instance) = every channel audible.
+  sU32 chanMute;
+
   // buffers
   sF32 vcebuf[MAX_FRAME_SIZE];
   sF32 vcebuf2[MAX_FRAME_SIZE];
@@ -3314,7 +3322,7 @@ struct V2Chan
     }
   }
 
-  void process(sInt nsamples)
+  void process(sInt nsamples, bool muted = false)
   {
     StereoSample *chan = inst->chanbuf;
     CHTAP_SNAP(entry, chan, nsamples);
@@ -3369,16 +3377,23 @@ struct V2Chan
       if (!nochain && !nodcf) { dcf2.renderStereo(chan, chan, nsamples); CHTAP_SNAP(dcf2, chan, nsamples); }
     }
 
-    // Aux1/2 send (mono)
-    accumulateMonoMix(inst->aux1buf, chan, nsamples, a1gain);
-    accumulateMonoMix(inst->aux2buf, chan, nsamples, a2gain);
+    // Muted channels render fully (above) but feed NO output bus -- not the main
+    // mix, and not the reverb/delay/aux sends (skipping only the main mix would
+    // leave the channel's reverb/delay tail audible). The dry FX state has
+    // already advanced, so unmuting resumes seamlessly and in-phase.
+    if (!muted)
+    {
+      // Aux1/2 send (mono)
+      accumulateMonoMix(inst->aux1buf, chan, nsamples, a1gain);
+      accumulateMonoMix(inst->aux2buf, chan, nsamples, a2gain);
 
-    // AuxA/B send (stereo)
-    accumulate(inst->auxabuf, chan, nsamples, aasnd);
-    accumulate(inst->auxbbuf, chan, nsamples, absnd);
+      // AuxA/B send (stereo)
+      accumulate(inst->auxabuf, chan, nsamples, aasnd);
+      accumulate(inst->auxbbuf, chan, nsamples, absnd);
 
-    // Channel buffer to mix buffer (stereo)
-    accumulate(inst->mixbuf, chan, nsamples, chgain);
+      // Channel buffer to mix buffer (stereo)
+      accumulate(inst->mixbuf, chan, nsamples, chgain);
+    }
 
     DEBUG_PLOT_STEREO(this, chan, nsamples);
   }
@@ -4390,7 +4405,7 @@ private:
       sF32 ctin = 0.0f;
       if (getenv("V2_CHANTRACE")) { for (sInt i=0;i<nsamples;i++){ sF32 a=fabsf(instance.chanbuf[i].l),b=fabsf(instance.chanbuf[i].r); if(a>ctin)ctin=a; if(b>ctin)ctin=b; } }
 #endif
-      chansw[chan].process(nsamples);
+      chansw[chan].process(nsamples, ((instance.chanMute >> chan) & 1) != 0);
 #ifndef NDEBUG
       if (getenv("V2_CHANTRACE")) {
         sF32 cto=0.0f; for (sInt i=0;i<nsamples;i++){ sF32 a=fabsf(instance.chanbuf[i].l),b=fabsf(instance.chanbuf[i].r); if(a>cto)cto=a; if(b>cto)cto=b; }
@@ -4547,6 +4562,11 @@ void __stdcall synthSetEra(void *pthis, int base,
 void __stdcall synthSetSeed(void *pthis, unsigned long long seed)
 {
   ((V2Synth *)pthis)->instance.userSeed = (sU64)seed;
+}
+
+void __stdcall synthSetChanMute(void *pthis, unsigned int muteMask)
+{
+  ((V2Synth *)pthis)->instance.chanMute = (sU32)muteMask;
 }
 
 void __stdcall synthGetPoly(void *pthis, void *dest)

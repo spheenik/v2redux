@@ -99,6 +99,25 @@ public:
   // Takes effect at the next play().
   void setSeed(uint64_t seed);
 
+  // ---- interactive control + display monitors (NOT part of the determinism
+  // contract; the default all-audible mask leaves the reference render exact) --
+
+  // Per-channel mute: bit ch set = channel audible (default: all 16 audible).
+  // A muted channel still renders its voices + FX (state advances exactly as the
+  // reference) but feeds no output bus -- so muting/unmuting is instant and
+  // in-phase, notes already sounding cut immediately, and nothing hangs or
+  // desyncs. Persists across play()/seek; takes effect on the next render().
+  void setChannelMask(uint32_t mask);
+
+  // Active voice count per channel into dest[0..15]; returns the total across
+  // all channels. dest must hold 16 ints. Display-only.
+  int getChannelPoly(int *dest16) const;
+
+  // Monotonic per-channel note-on counters into dest[0..15] (dest holds 16).
+  // A rise in dest[ch] between two polls means a note was struck on channel ch
+  // (counts even muted channels). Display-only.
+  void getChannelNoteOns(uint32_t *dest16) const;
+
 private:
   PlayerImpl *impl_;
   int detectedVersion_;

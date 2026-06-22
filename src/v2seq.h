@@ -63,7 +63,8 @@ public:
 
   // init
   // call this instead of a constructor
-  void Init(sU32 a_tickspersec=1000) { m_tpc=a_tickspersec; m_base.valid=0; m_era=v2redux::Era::Auto(); m_seed=0; }
+  void Init(sU32 a_tickspersec=1000) { m_tpc=a_tickspersec; m_base.valid=0; m_era=v2redux::Era::Auto(); m_seed=0;
+                                       m_chanmask=0xffffffff; for (sInt i=0;i<16;i++) m_noteon[i]=0; }
 
 
   // era compat: declare which v2m FORMAT VERSION the song was originally
@@ -82,6 +83,29 @@ public:
 
   // determinism seed (applied after synthInit at the next Play/Reset)
   void SetSeed(sU64 a_seed) { m_seed = a_seed; }
+
+
+  // ---- interactive channel control + display monitors (NOT part of the synth
+  // determinism contract; these never alter the bit-exact reference render that
+  // the default all-channels-audible mask produces) -----------------------------
+
+  // interactive mute: bit ch set = channel audible (default: all on). Muting
+  // happens at the MIX stage in the synth core (synthSetChanMute) -- a muted
+  // channel keeps rendering its voices + FX exactly as the reference does, but
+  // contributes to no output bus. So muting/unmuting is instant, in-phase, and
+  // click-free: notes already sounding are silenced at once, none hang, and no
+  // song state diverges. Re-applied after every synthInit (Reset).
+  void SetChanMask(sU32 a_mask) { m_chanmask = a_mask;
+                                  synthSetChanMute(m_synth, (~a_mask) & 0xffffu); }
+
+  // active voice count per channel: dest[0..CHANS-1], dest[CHANS]=total
+  // (dest must hold CHANS+1 = 17 ints). Display-only.
+  void GetPoly(sInt *a_dest);
+
+  // monotonic per-channel note-on counters (dest must hold 16). A rise in
+  // dest[ch] between two polls = >=1 note struck on that channel since the last
+  // poll; counts even muted channels. Display-only.
+  void GetNoteOns(sU32 *a_dest);
 
 
 
@@ -257,6 +281,8 @@ private:
 	sU32        m_tpc;
 	v2redux::Era m_era;  // era compat: engine-identity coordinate (Auto = modern)
 	sU64        m_seed;     // determinism seed (0 = reference)
+	sU32        m_chanmask; // interactive mute (bit ch = audible); re-applied on Reset
+	sU32        m_noteon[16]; // per-channel note-on counters; display-only
 	V2MBase			m_base;
 	PlayerState m_state;
 	sU32        m_samplerate;

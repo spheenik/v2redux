@@ -13,6 +13,15 @@
 //
 // Keys:  space = pause   r = restart   l = loop toggle   q/esc = quit
 //        left/right = seek +-5s   up/down = seek +-30s
+//        1..9,0 = toggle-mute channels 1..10   ctrl+1..6 = channels 11..16
+//        shift+digit = solo that channel (toggle)   ` = un-mute all
+//
+// A 16-cell channel strip across the top shows per-channel activity: bar height
+// = active voices (synthGetPoly), a bright flash on each note-on, green = audi-
+// ble, red = muted, yellow top edge = soloed. Muting happens at the synth mix
+// stage (a muted channel still renders but feeds no bus -- instant, in-phase,
+// no hung notes) and is outside the determinism contract: the default
+// all-audible mask renders the exact reference bits.
 
 #include "v2redux.h"
 
@@ -64,6 +73,13 @@ static std::atomic<bool>  g_paused{false};
 static std::atomic<bool>  g_restart{false};
 static std::atomic<bool>  g_loop{true};
 
+// channel mute/solo. The GUI thread owns g_muted/g_soloCh (set in event_cb) and
+// publishes the effective audible mask (bit ch = audible) into g_chanMask; the
+// audio thread reads it and hands it to the player before each render block.
+static std::atomic<uint32_t> g_chanMask{0xffff};
+static uint16_t           g_muted  = 0;   // bit ch set = user-muted (GUI thread)
+static int                g_soloCh = -1;  // soloed channel, or -1 (GUI thread)
+
 // playhead + seeking. The audio thread owns g_posFrames and publishes the
 // position in ms; the GUI thread reads g_playMs and posts a target into
 // g_seekMs (-1 = none) which the audio thread consumes via play(targetMs).
@@ -99,6 +115,7 @@ static void audio_cb(float *buffer, int nframes, int nchan)
   }
 
   // device buffer is interleaved stereo float32 -- exactly render()'s format
+  g_player.setChannelMask(g_chanMask.load(std::memory_order_relaxed));
   g_player.render(buffer, (uint32_t)nframes);
 
   if (g_loop.load(std::memory_order_relaxed) && !g_player.isPlaying()) {
@@ -159,10 +176,12 @@ static void fft(float *re, float *im, int n)
 // drawing helpers (NDC, sokol-gl default identity matrices)
 // ---------------------------------------------------------------------------
 
-// region: oscilloscope on the top half, spectrum on the bottom half
+// region: channel strip pinned at the very top, oscilloscope on the top half,
+// spectrum on the bottom half
 static const float SCOPE_Y0 = 0.05f, SCOPE_Y1 = 0.95f;   // -> upper band below
-static const float SCOPE_CY = 0.50f, SCOPE_H = 0.42f;    // center / half-height
+static const float SCOPE_CY = 0.45f, SCOPE_H = 0.36f;    // center / half-height
 static const float SPEC_Y0  = -0.95f, SPEC_H = 0.85f;    // bars grow up from y0
+static const float CHAN_Y0  = 0.895f, CHAN_Y1 = 0.985f;  // 16-cell channel strip
 
 static void draw_grid()
 {
@@ -176,6 +195,101 @@ static void draw_grid()
   sgl_v2f(-0.97f, SPEC_Y0);  sgl_v2f(0.97f, SPEC_Y0);
   sgl_end();
   (void)SCOPE_Y0; (void)SCOPE_Y1;
+}
+
+// minimal 7-segment digit, drawn with sgl lines (display-only; avoids pulling
+// in a font/atlas). bit0=a (top) .. bit6=g (middle), clockwise from the top.
+static void draw_digit(float left, float bot, float dw, float dh, int d)
+{
+  static const unsigned char SEG[10] =
+    { 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F };
+  if (d < 0 || d > 9) return;
+  unsigned char s = SEG[d];
+  float right = left + dw, top = bot + dh, mid = bot + dh * 0.5f;
+  sgl_begin_lines();
+  if (s & 0x01) { sgl_v2f(left, top);  sgl_v2f(right, top); } // a
+  if (s & 0x02) { sgl_v2f(right, top); sgl_v2f(right, mid); } // b
+  if (s & 0x04) { sgl_v2f(right, mid); sgl_v2f(right, bot); } // c
+  if (s & 0x08) { sgl_v2f(left, bot);  sgl_v2f(right, bot); } // d
+  if (s & 0x10) { sgl_v2f(left, mid);  sgl_v2f(left, bot);  } // e
+  if (s & 0x20) { sgl_v2f(left, top);  sgl_v2f(left, mid);  } // f
+  if (s & 0x40) { sgl_v2f(left, mid);  sgl_v2f(right, mid); } // g
+  sgl_end();
+}
+
+// 1- or 2-digit number centered horizontally on cx, sitting on baseline baseY
+static void draw_number(float cx, float baseY, int n, float r, float g, float b)
+{
+  const float dw = 0.015f, dh = 0.032f, gap = 0.007f;
+  int digits[2], nd = 0;
+  if (n >= 10) digits[nd++] = (n / 10) % 10;
+  digits[nd++] = n % 10;
+  float total = nd * dw + (nd - 1) * gap;
+  float x = cx - total * 0.5f;
+  sgl_c4f(r, g, b, 1.0f);
+  for (int i = 0; i < nd; i++) {
+    draw_digit(x, baseY, dw, dh, digits[i]);
+    x += dw + gap;
+  }
+}
+
+// 16-cell channel strip: bar height = active voices, brightness pulses on each
+// note-on, green = audible / red = muted, yellow top edge = soloed. A 1-based
+// channel number is labelled just below each cell.
+static void draw_channels(const int *poly, const float *flash,
+                          uint16_t muted, int soloCh)
+{
+  const float x0 = -0.97f, x1 = 0.97f;
+  const float w  = (x1 - x0) / 16.0f;
+  const float H  = CHAN_Y1 - CHAN_Y0;
+  const int   POLYREF = 6;   // voice count that reads as a full-height cell
+
+  for (int c = 0; c < 16; c++) {
+    float cx0 = x0 + w * c + 0.004f;
+    float cx1 = x0 + w * (c + 1) - 0.004f;
+    bool audible = soloCh >= 0 ? (c == soloCh) : !((muted >> c) & 1);
+    float fl = flash[c];
+
+    // muted channels get a faint red wash so their state reads even when idle
+    if (!audible) {
+      sgl_begin_quads();
+      sgl_c4f(0.28f, 0.05f, 0.05f, 1.0f);
+      sgl_v2f(cx0, CHAN_Y0); sgl_v2f(cx1, CHAN_Y0);
+      sgl_v2f(cx1, CHAN_Y1); sgl_v2f(cx0, CHAN_Y1);
+      sgl_end();
+    }
+
+    // activity fill (voice count), lifted by the note-on flash so a freshly
+    // struck note lights even before its voice registers in the poll
+    float lvl = (float)poly[c] / POLYREF; if (lvl > 1.0f) lvl = 1.0f;
+    if (fl > 0.0f && lvl < 0.18f) lvl = 0.18f;
+    if (lvl > 0.0f) {
+      float fy1 = CHAN_Y0 + H * lvl;
+      sgl_begin_quads();
+      if (audible)
+        sgl_c4f(0.12f + 0.7f * fl, 0.78f, 0.34f + 0.55f * fl, 1.0f); // green
+      else
+        sgl_c4f(0.55f + 0.4f * fl, 0.14f, 0.14f, 1.0f);             // red
+      sgl_v2f(cx0, CHAN_Y0); sgl_v2f(cx1, CHAN_Y0);
+      sgl_v2f(cx1, fy1);     sgl_v2f(cx0, fy1);
+      sgl_end();
+    }
+
+    // cell frame (brighter outline for the soloed channel)
+    sgl_begin_line_strip();
+    if (soloCh == c) sgl_c4f(0.95f, 0.9f, 0.2f, 1.0f);
+    else             sgl_c4f(0.22f, 0.24f, 0.28f, 1.0f);
+    sgl_v2f(cx0, CHAN_Y0); sgl_v2f(cx1, CHAN_Y0);
+    sgl_v2f(cx1, CHAN_Y1); sgl_v2f(cx0, CHAN_Y1); sgl_v2f(cx0, CHAN_Y0);
+    sgl_end();
+
+    // 1-based channel number under the cell (yellow=solo, gray=audible, dim=mute)
+    float lr, lg, lb;
+    if (soloCh == c)   { lr = 0.95f; lg = 0.9f;  lb = 0.3f;  }
+    else if (audible)  { lr = 0.62f; lg = 0.66f; lb = 0.72f; }
+    else               { lr = 0.5f;  lg = 0.22f; lb = 0.22f; }
+    draw_number(0.5f * (cx0 + cx1), CHAN_Y0 - 0.052f, c + 1, lr, lg, lb);
+  }
 }
 
 static void draw_scope(const float *snap)
@@ -348,10 +462,25 @@ static void frame_cb(void)
   vuL = pkL > vuL ? pkL : vuL - rel; if (vuL < 0.0f) vuL = 0.0f;
   vuR = pkR > vuR ? pkR : vuR - rel; if (vuR < 0.0f) vuR = 0.0f;
 
+  // per-channel activity: poll active voices + note-on counters (display-only,
+  // a benign read of synth state the audio thread is updating). A counter that
+  // advanced since last frame fires a flash that then decays.
+  static int      poly[16] = {0};
+  static uint32_t non[16]  = {0}, nonPrev[16] = {0};
+  static float    flash[16] = {0};
+  g_player.getChannelPoly(poly);
+  g_player.getChannelNoteOns(non);
+  for (int c = 0; c < 16; c++) {
+    if (non[c] != nonPrev[c]) flash[c] = 1.0f;
+    nonPrev[c] = non[c];
+    flash[c] -= dt * 3.5f; if (flash[c] < 0.0f) flash[c] = 0.0f;
+  }
+
   sgl_defaults();
   draw_grid();
   draw_spectrum(snap);
   draw_scope(snap);
+  draw_channels(poly, flash, g_muted, g_soloCh);
   draw_vu(vuL > 1.0f ? 1.0f : vuL, vuR > 1.0f ? 1.0f : vuR);
 
   sg_pass pass = {};
@@ -374,11 +503,53 @@ static void seek_by(long long deltaMs)
   fprintf(stderr, "seek -> %lld:%02lld\n", t / 60000, (t / 1000) % 60);
 }
 
+// recompute the audible mask from the GUI-thread mute/solo state and publish it
+static void publish_mask(void)
+{
+  uint32_t m = g_soloCh >= 0 ? (1u << g_soloCh)
+                             : (~(uint32_t)g_muted) & 0xffffu;
+  g_chanMask.store(m, std::memory_order_relaxed);
+}
+
+// digit -> channel toggle. Ctrl selects the upper bank (channels 11..16); Shift
+// solos instead of muting. Returns true if the key was a channel key.
+static bool handle_channel_key(int keycode, uint32_t mods)
+{
+  int digit;
+  if (keycode >= SAPP_KEYCODE_1 && keycode <= SAPP_KEYCODE_9)
+    digit = keycode - SAPP_KEYCODE_1 + 1;   // 1..9
+  else if (keycode == SAPP_KEYCODE_0)
+    digit = 10;
+  else
+    return false;
+
+  int ch;
+  if (mods & SAPP_MODIFIER_CTRL) {
+    if (digit < 1 || digit > 6) return true; // upper bank is channels 11..16
+    ch = 10 + (digit - 1);
+  } else {
+    ch = digit - 1;                          // 0..9
+  }
+
+  if (mods & SAPP_MODIFIER_SHIFT) {
+    g_soloCh = (g_soloCh == ch) ? -1 : ch;   // toggle solo
+  } else {
+    g_muted ^= (uint16_t)(1u << ch);         // toggle mute, drop any solo
+    g_soloCh = -1;
+  }
+  publish_mask();
+  return true;
+}
+
 static void event_cb(const sapp_event *e)
 {
   if (e->type != SAPP_EVENTTYPE_KEY_DOWN)
     return;
+  if (handle_channel_key(e->key_code, e->modifiers))
+    return;
   switch (e->key_code) {
+  case SAPP_KEYCODE_GRAVE_ACCENT:
+    g_muted = 0; g_soloCh = -1; publish_mask(); break;
   case SAPP_KEYCODE_ESCAPE:
   case SAPP_KEYCODE_Q: sapp_request_quit(); break;
   case SAPP_KEYCODE_SPACE:

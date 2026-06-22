@@ -171,6 +171,8 @@ void V2MPlayer::Reset()
 			synthSetEra(m_synth, m_era.base, m_era.overridden, m_era.forcedNew);
 		if (m_seed)
 			synthSetSeed(m_synth, m_seed);
+		// synthInit zeroed the mute mask too; re-apply the interactive mute.
+		synthSetChanMute(m_synth, (~m_chanmask) & 0xffffu);
 		synthSetGlobals(m_synth,(void*)m_base.globals);
 		synthSetLyrics(m_synth,m_base.speechptrs);
 	}
@@ -275,8 +277,11 @@ void V2MPlayer::Tick()
 		while (sc.notenr<bc.notenum && m_state.time==sc.notent)
 		{
 			PUTSTAT(0x90|ch)
-			*mptr++=(sc.lastnte+=sc.noteptr[3*bc.notenum]);
-			*mptr++=(sc.lastvel+=sc.noteptr[4*bc.notenum]);
+			sU8 nte=(sc.lastnte+=sc.noteptr[3*bc.notenum]);
+			sU8 vel=(sc.lastvel+=sc.noteptr[4*bc.notenum]);
+			if (vel) m_noteon[ch]++;   // display tap (per-channel note-on counter)
+			*mptr++=nte;
+			*mptr++=vel;
 			sc.notenr++;
 			sc.noteptr++;
 			UPDATENT2(sc.notenr,sc.notent,sc.noteptr,bc.notenum);
@@ -292,6 +297,18 @@ void V2MPlayer::Tick()
 	synthProcessMIDI(m_synth,m_midibuf);
 	
 	if (m_state.nexttime==(sU32)-1) m_state.state=PlayerState::STOPPED;
+}
+
+
+// display-only monitors (outside the determinism contract; see header)
+void V2MPlayer::GetPoly(sInt *a_dest)
+{
+	synthGetPoly(m_synth, a_dest);
+}
+
+void V2MPlayer::GetNoteOns(sU32 *a_dest)
+{
+	for (sInt i=0;i<16;i++) a_dest[i]=m_noteon[i];
 }
 
 

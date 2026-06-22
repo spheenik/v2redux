@@ -69,6 +69,12 @@ extern "C"
   // determinism knob: replaces the historical rdtsc seeding (0 = reference)
   void __stdcall synthSetSeed(void *pthis, unsigned long long seed);
 
+  // interactive channel mute (display/playback knob; NOT part of the determinism
+  // contract). bit ch set = muted -- the channel still renders but feeds no
+  // output bus. Default (and synthInit) = 0 (all audible). Re-apply after
+  // synthInit, like the seed.
+  void __stdcall synthSetChanMute(void *pthis, unsigned int muteMask);
+
   void __stdcall synthGetPoly(void *pthis, void *dest);
   void __stdcall synthGetPgm(void *pthis, void *dest);
   void __stdcall synthSetVUMode(void *pthis, int mode);
