@@ -120,6 +120,16 @@ public:
   // (counts even muted channels). Display-only.
   void getChannelNoteOns(uint32_t *dest16) const;
 
+  // Song length in milliseconds: the loop point where isPlaying() goes false,
+  // derived from the sequence timing WITHOUT rendering audio (fast). Implies a
+  // synth reset -- call play() before the next render(). 0 if nothing is open.
+  long long lengthMs() const;
+
+  // Per-channel output peak (0..~1+) into dest[0..15], measured since the last
+  // call and then cleared (read-and-clear). Reflects each channel's loudness in
+  // the mix, independent of its mute state. Display-only.
+  void getChannelLevels(float *dest16);
+
 private:
   PlayerImpl *impl_;
   int detectedVersion_;

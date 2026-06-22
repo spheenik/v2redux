@@ -686,6 +686,12 @@ struct V2Instance
   // Default 0 (synthInit zeroes the whole instance) = every channel audible.
   sU32 chanMute;
 
+  // per-channel output peak meter (display-only, read-and-cleared by the host).
+  // Peak of each channel's post-FX mix contribution, max-accumulated across the
+  // chunks rendered since the last read. Written during render but only READ
+  // from chan[]/written to this side buffer -- never alters the rendered bits.
+  sF32 chanPeak[16];   // 16 == V2Synth::CHANS (not in scope here)
+
   // buffers
   sF32 vcebuf[MAX_FRAME_SIZE];
   sF32 vcebuf2[MAX_FRAME_SIZE];
@@ -3322,7 +3328,7 @@ struct V2Chan
     }
   }
 
-  void process(sInt nsamples, bool muted = false)
+  void process(sInt nsamples, bool muted = false, sInt chanIndex = -1)
   {
     StereoSample *chan = inst->chanbuf;
     CHTAP_SNAP(entry, chan, nsamples);
@@ -3375,6 +3381,24 @@ struct V2Chan
       dist.renderStereo(chan, chan, nsamples);
       CHTAP_SNAP(dist, chan, nsamples);
       if (!nochain && !nodcf) { dcf2.renderStereo(chan, chan, nsamples); CHTAP_SNAP(dcf2, chan, nsamples); }
+    }
+
+    // per-channel output meter (display-only): peak of this channel's mix
+    // contribution (post-FX signal * channel gain), measured regardless of mute
+    // so a silenced-but-active channel still reads its level. Max-accumulated;
+    // the host reads-and-clears. Reads chan[]/writes the side buffer only.
+    if (chanIndex >= 0)
+    {
+      sF32 pk = 0.0f;
+      for (sInt i = 0; i < nsamples; i++)
+      {
+        sF32 a = chan[i].l; if (a < 0.0f) a = -a;
+        sF32 b = chan[i].r; if (b < 0.0f) b = -b;
+        sF32 m = a > b ? a : b;
+        if (m > pk) pk = m;
+      }
+      pk *= chgain;
+      if (pk > inst->chanPeak[chanIndex]) inst->chanPeak[chanIndex] = pk;
     }
 
     // Muted channels render fully (above) but feed NO output bus -- not the main
@@ -4405,7 +4429,7 @@ private:
       sF32 ctin = 0.0f;
       if (getenv("V2_CHANTRACE")) { for (sInt i=0;i<nsamples;i++){ sF32 a=fabsf(instance.chanbuf[i].l),b=fabsf(instance.chanbuf[i].r); if(a>ctin)ctin=a; if(b>ctin)ctin=b; } }
 #endif
-      chansw[chan].process(nsamples, ((instance.chanMute >> chan) & 1) != 0);
+      chansw[chan].process(nsamples, ((instance.chanMute >> chan) & 1) != 0, chan);
 #ifndef NDEBUG
       if (getenv("V2_CHANTRACE")) {
         sF32 cto=0.0f; for (sInt i=0;i<nsamples;i++){ sF32 a=fabsf(instance.chanbuf[i].l),b=fabsf(instance.chanbuf[i].r); if(a>cto)cto=a; if(b>cto)cto=b; }
@@ -4572,6 +4596,12 @@ void __stdcall synthSetChanMute(void *pthis, unsigned int muteMask)
 void __stdcall synthGetPoly(void *pthis, void *dest)
 {
   ((V2Synth *)pthis)->getPoly((sInt*)dest);
+}
+
+void __stdcall synthGetChannelPeaks(void *pthis, float *dest16)
+{
+  V2Synth *s = (V2Synth *)pthis;
+  for (int i = 0; i < 16; i++) { dest16[i] = s->instance.chanPeak[i]; s->instance.chanPeak[i] = 0.0f; }
 }
 
 void __stdcall synthGetPgm(void *pthis, void *dest)

@@ -158,4 +158,20 @@ void Player::getChannelNoteOns(uint32_t *dest16) const
   const_cast<V2MPlayer &>(impl_->seq).GetNoteOns((sU32 *)dest16);
 }
 
+long long Player::lengthMs() const
+{
+  if (!impl_->opened) return 0;
+  sU32 smp = const_cast<V2MPlayer &>(impl_->seq).CalcSongSamples();
+  return (long long)smp * 1000 / 44100;
+}
+
+void Player::getChannelLevels(float *dest16)
+{
+  if (!impl_->opened) {
+    for (int i = 0; i < 16; i++) dest16[i] = 0.0f;
+    return;
+  }
+  impl_->seq.GetChannelPeaks((sF32 *)dest16);
+}
+
 } // namespace v2redux

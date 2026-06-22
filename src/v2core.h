@@ -76,6 +76,9 @@ extern "C"
   void __stdcall synthSetChanMute(void *pthis, unsigned int muteMask);
 
   void __stdcall synthGetPoly(void *pthis, void *dest);
+  // per-channel output peak meter (display-only): copies 16 floats into dest
+  // (peak since the last call) and clears the accumulators. Read-and-clear.
+  void __stdcall synthGetChannelPeaks(void *pthis, float *dest16);
   void __stdcall synthGetPgm(void *pthis, void *dest);
   void __stdcall synthSetVUMode(void *pthis, int mode);
   void __stdcall synthGetChannelVU(void *pthis, int ch, float *l, float *r);

@@ -311,6 +311,35 @@ void V2MPlayer::GetNoteOns(sU32 *a_dest)
 	for (sInt i=0;i<16;i++) a_dest[i]=m_noteon[i];
 }
 
+void V2MPlayer::GetChannelPeaks(sF32 *a_dest)
+{
+	synthGetChannelPeaks(m_synth, a_dest);
+}
+
+// Timing-only fast-forward: mirror Play()/Render()'s tick loop but skip
+// synthRender, summing the per-tick sample deltas until the song stops. This
+// reaches the exact sample at which IsPlaying() would go false, without the DSP.
+sU32 V2MPlayer::CalcSongSamples()
+{
+	if (!m_base.valid || !m_samplerate) return 0;
+	Stop();
+	Reset();
+	m_state.state=PlayerState::PLAYING;
+	m_state.smpldelta=0;
+	m_state.smplrem=0;
+	sU64 total=0;
+	while (m_state.state==PlayerState::PLAYING)
+	{
+		total+=m_state.smpldelta;
+		Tick();
+		if (m_state.state==PlayerState::PLAYING)
+			UpdateSampleDelta(m_state.nexttime,m_state.time,m_state.usecs,m_base.timediv2,&m_state.smplrem,&m_state.smpldelta);
+		else
+			break;
+	}
+	return (sU32)total;
+}
+
 
 
 sBool V2MPlayer::Open(const void *a_v2mptr, sU32 a_samplerate)

@@ -107,6 +107,17 @@ public:
   // poll; counts even muted channels. Display-only.
   void GetNoteOns(sU32 *a_dest);
 
+  // per-channel output peak since the last call (dest must hold 16); read-and-
+  // clears the meter. Display-only.
+  void GetChannelPeaks(sF32 *a_dest);
+
+  // Song length in SAMPLES at the current samplerate, computed by running the
+  // sequencer's tick/tempo loop ONLY (no DSP) to the point Render() stops --
+  // i.e. where IsPlaying() goes false. Fast (cost ~= event count, not duration).
+  // Mutates play state + ticks the synth, so call Play() before Render() after.
+  // Returns 0 if no song is open.
+  sU32 CalcSongSamples();
+
 
 
 	// opens a v2m file for playing
