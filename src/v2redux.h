@@ -34,10 +34,12 @@
 #endif
 // Ronan (speech synth): the port is verified against the candytron v5 oracle
 // (task 6.1, user-confirmed by listening: josie speech corr 0.99966). Default
-// remains OFF so the baseline corpus is unaffected and speech-silent songs
-// drop the phoneme tables; opt in with -DV2_RONAN=1 for josie/kkrieger speech.
+// is ON -- speech songs (candytron, josie, .kkrieger) route channel 15 through
+// the Ronan vocal tract, and with Ronan OFF that channel's raw glottal source
+// leaks to the mix as noise. Opt OUT with -DV2_RONAN=0 for a speech-silent
+// build (drops the phoneme tables; changes those songs' determinism hashes).
 #ifndef V2_RONAN
-#define V2_RONAN 0
+#define V2_RONAN 1
 #endif
 
 // Era + the eras:: catalog (the engine-identity coordinate the caller supplies

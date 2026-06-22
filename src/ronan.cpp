@@ -22,8 +22,9 @@
 // the candytron binary by one syllable for the entire song. Fixed (see reset()).
 // Verified vs the candytron speech oracle (c2_oracle_solo + synthSetLyrics):
 // ch15 speech solo corr 0.99966 (rms 0.0016), whole-song josie corr 0.99916
-// (rms 0.0090 = the music-bed eps floor). V2_RONAN still defaults to 0 (opt-in
-// build flag for the speech synth); enable with -DV2_RONAN=1.
+// (rms 0.0090 = the music-bed eps floor). V2_RONAN defaults to 1 (speech songs
+// route ch15 through the vocal tract; with it OFF that channel leaks raw noise);
+// build a speech-silent variant with -DV2_RONAN=0.
 
 #include "v2redux.h" // V2_RONAN
 

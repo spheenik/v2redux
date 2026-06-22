@@ -19,9 +19,12 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # ---- feature configuration (era range + optional Ronan speech synth) -------
-# OFF by default so the determinism baselines (Ronan-silent) hold; turn ON with
-# -DV2_RONAN=ON for songs that use the speech channel (candytron, josie, ...).
-option(V2_RONAN "Enable the Ronan speech-synth channel" OFF)
+# ON by default: songs that use the speech channel (candytron, josie, .kkrieger,
+# ...) route channel 15 through the Ronan vocal tract; with Ronan OFF that
+# channel's raw glottal source leaks to the mix as NOISE. The determinism
+# baselines are generated with this default. Turn OFF with -DV2_RONAN=OFF only
+# for a speech-silent build (drops the phoneme tables; changes those songs' hashes).
+option(V2_RONAN "Enable the Ronan speech-synth channel" ON)
 set(V2_VER_MIN "" CACHE STRING "Lower bound of the compiled era range (blank = full)")
 set(V2_VER_MAX "" CACHE STRING "Upper bound of the compiled era range (blank = full)")
 set(V2_EMBED_SONG "" CACHE FILEPATH

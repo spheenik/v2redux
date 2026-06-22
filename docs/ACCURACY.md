@@ -560,8 +560,9 @@ genuinely **ch15-only** (every other channel's tick-0/12 events are note-OFFs, v
 real notes start tick ~3072), and ch15 is the **ronan speech channel** — `RenderBlock`
 routes `cl==15` through `syRonanProcess`, which vocodes the carrier to **silence
 without lyrics**. NOP the ch15 ronan guard (`KK_NORONAN`) and the intro renders the raw
-carrier (peak 0.27). (The portable defaults to `V2_RONAN 0`, so it too leaves ch15 raw;
-neither side currently drives speech.) **Instrument fidelity, ch15 excluded:** whole-mix
+carrier (peak 0.27). (A `-DV2_RONAN=0` portable build leaves ch15 raw the same way —
+which is why that build leaks ch15 as noise; the default is now `V2_RONAN=1`.)
+**Instrument fidelity, ch15 excluded:** whole-mix
 corr 0.85 (peaks/rms within 3 %); per-channel solos — tonal ch7 **0.998** (sample-
 aligned; a tiny ≈326 Hz 5th-harmonic timbre residual), FM ch11 0.77 (energy matches,
 phase decorrelates). The FM/noise/drum channels phase-decorrelate — the same

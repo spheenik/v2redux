@@ -28,7 +28,8 @@ song, reproduced from disassembly of the original release binaries.
   binary32, matching the original x87 `PC=24` rounding op-for-op.
 - **Self-contained.** No dependencies beyond the C++ standard library. No inline
   asm, no x87/SSE assumptions, 32/64-bit clean, builds on GCC / Clang / MSVC.
-- **Speech.** The Ronan phoneme/speech channel is ported and working.
+- **Speech.** The Ronan phoneme/speech channel is ported, working, and **on by
+  default** (build `-DV2_RONAN=0` for a speech-silent variant).
 
 ## Build
 
