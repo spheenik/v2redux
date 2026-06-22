@@ -201,4 +201,17 @@ if(V2_BUILD_TESTS)
               ${CMAKE_CURRENT_SOURCE_DIR}/test/check.py
               --dump $<TARGET_FILE:v2dump>)
   endif()
+
+  # the fidelity gate: each song vs its genuine period-engine oracle (the
+  # correctness check check.py can't give). Registered only with V2_RONAN=ON
+  # (speech songs need it) AND the vendored period binaries present locally
+  # (gitignored third-party; see fidelity/README.md) -- so a fresh clone skips
+  # it instead of failing.
+  if(Python3_Interpreter_FOUND AND V2_RONAN AND
+     EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/fidelity/oracles/c1_fr08)
+    add_test(NAME fidelity
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/fidelity/sweep.py
+              --lib $<TARGET_FILE:v2redux>)
+  endif()
 endif()

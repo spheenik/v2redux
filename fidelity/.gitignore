@@ -1,0 +1,6 @@
+# Vendored third-party period binaries -- demo images + oracle harnesses.
+# NOT committed: copyrighted demo code, and fully regenerable (see README.md).
+# Kept on local disk (not /tmp) so the sweep survives a reboot.
+images/
+oracles/
+_scratch/
