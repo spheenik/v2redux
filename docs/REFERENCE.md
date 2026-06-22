@@ -76,8 +76,8 @@ validation — ground truth is always the genuine embedded song at its native er
 | --- | --- | --- |
 | **v0** | fr-08 *.the .product* (2000) | **whole-song bit-exact** (663 s, max\|d\| = 0) |
 | **v1** | *flybye* (2001) | **whole-song bit-exact** |
-| v2 | — | no period binary exists anywhere; renders deterministically at native-era behaviour, but era-correctness is **unprovable** until a v2 binary surfaces |
-| **v3** | fr-014 *mark & sweep* (2001) | oracle-proven, ε-floor (whole-song corr 0.99989) |
+| v2 | — | no period binary *or file* exists anywhere; renders deterministically at native-era behaviour, but era-correctness is **unprovable** until a v2 file surfaces (the farbomat lead carved as v3 — see ACCURACY.md §4) |
+| **v3** | fr-014 *mark & sweep* (2001); also fr-022 party, *farbomat* | oracle-proven, ε-floor (whole-song corr 0.99989) |
 | **v4** | fr-019 *poem to a horse* (2002) | oracle-proven, ε-floor (0 of 341 s above 3 %, rms 0.12 %) |
 | **v5** | *candytron* (2003) + fr-024 / fr-029 / *.kkrieger* | candytron per-channel DSP / voice / player / voice-steal **bit-exact**; fr-024/fr-029/.kkrieger ε-floor |
 | **v6** | *synth.asm* (2004) | **bit-exact** (max\|d\| = 0) |

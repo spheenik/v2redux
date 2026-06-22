@@ -171,6 +171,18 @@ render oracles** — v3/v4 osc rendering is render-proven (fr019 whole-mix rms
 has no binary at all** — it remains liveness-only. kkrieger6's native-v5 pool
 note stands (saturates 32 voices at 102.47 s; josie never does).
 
+**Update 2026-06-22 (the farbomat v2 lead — closed):** the V2 author Tammo
+Hinrichs suggested fr-minus-03 *farbomat* as the only plausible carrier of a
+**format-version-2** .v2m (v1 = fr-013 Nov 2001, v3 = fr-014 late Dec 2001), but
+warned he may have "bumped the version 2× between releases." Carved
+(`fr-minus-03-party.zip`, exe 2001-12-28): one valid 9-channel song that the
+loader detects as **format version 3** — same as fr-014, both late-Dec-2001. So
+the lead is closed: farbomat is now a third genuine **v3** corpus file
+(`corpus/embedded/farbomat.v2m`, determinism gate only — no render oracle yet),
+and the **v2 format-version slot is still empty**. The POLY 16→32 "v2-or-v3"
+ambiguity in §3 is therefore unchanged (it needs a true v2-format file, which
+no known release provides).
+
 ## 5. CC1 mod-dest remap re-audit (low priority)
 
 Open lead from the 6.2 hunt: re-verify the v5→v6 mod-dest remap puts these on
