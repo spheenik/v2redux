@@ -769,6 +769,14 @@ sapp_desc sokol_main(int argc, char *argv[])
 #endif
   }
 
+  // Nothing to play (no file arg, load/open failed, or no embedded song): don't
+  // bring up a silent window -- a blank GUI with a frozen playhead reads as a
+  // hang. Bail out so the failure is obvious.
+  if (!g_opened) {
+    fprintf(stderr, "v2play: no song to play -- exiting\n");
+    exit(1);
+  }
+
   sapp_desc d = {};
   d.init_cb     = init_cb;
   d.frame_cb    = frame_cb;
